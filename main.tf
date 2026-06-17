@@ -110,6 +110,11 @@ resource "aws_eks_addon" "ebs_csi_driver" {
     update = "5m"
     delete = "5m"
   }
+
+  depends_on = [
+    aws_eks_node_group.devops-project,
+    aws_iam_role_policy_attachment.devops-project_node_group_ebs_policy
+  ]
 }
 
 
@@ -120,9 +125,9 @@ resource "aws_eks_node_group" "devops-project" {
   subnet_ids      = aws_subnet.devops-project_subnet[*].id
 
   scaling_config {
-    desired_size = 3
-    max_size     = 3
-    min_size     = 3
+    desired_size = 2
+    max_size     = 2
+    min_size     = 2
   }
 
   instance_types = ["t3.small"]
@@ -131,6 +136,12 @@ resource "aws_eks_node_group" "devops-project" {
     ec2_ssh_key               = var.ssh_key_name
     source_security_group_ids = [aws_security_group.devops-project_node_sg.id]
   }
+
+  depends_on = [
+    aws_iam_role_policy_attachment.devops-project_node_group_role_policy,
+    aws_iam_role_policy_attachment.devops-project_node_group_cni_policy,
+    aws_iam_role_policy_attachment.devops-project_node_group_registry_policy
+  ]
 }
 
 resource "aws_iam_role" "devops-project_cluster_role" {
