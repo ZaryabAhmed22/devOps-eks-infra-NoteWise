@@ -97,20 +97,20 @@ resource "aws_eks_cluster" "devops-project" {
 }
 
 
-# resource "aws_eks_addon" "ebs_csi_driver" {
-#   cluster_name = aws_eks_cluster.devops-project.name
-#   addon_name   = "aws-ebs-csi-driver"
+resource "aws_eks_addon" "ebs_csi_driver" {
+  cluster_name = aws_eks_cluster.devops-project.name
+  addon_name   = "aws-ebs-csi-driver"
 
-#   resolve_conflicts_on_create = "OVERWRITE"
-#   resolve_conflicts_on_update = "OVERWRITE"
+  resolve_conflicts_on_create = "OVERWRITE"
+  resolve_conflicts_on_update = "OVERWRITE"
 
-#   # Reduce this to 5 minutes (or even 2m for rapid testing)
-#   timeouts {
-#     create = "5m"
-#     update = "5m"
-#     delete = "5m"
-#   }
-# }
+  # Reduce this to 5 minutes (or even 2m for rapid testing)
+  timeouts {
+    create = "5m"
+    update = "5m"
+    delete = "5m"
+  }
+}
 
 
 resource "aws_eks_node_group" "devops-project" {
@@ -174,63 +174,6 @@ resource "aws_iam_role" "devops-project_node_group_role" {
   ]
 }
 EOF
-}
-
-# Define the OIDC Provider. The EKS cluster needs to be able to verify Kubernetes Service Accounts.
-data "tls_certificate" "eks" {
-  url = aws_eks_cluster.devops-project.identity[0].oidc[0].issuer
-}
-
-resource "aws_iam_openid_connect_provider" "main" {
-  client_id_list  = ["sts.amazonaws.com"]
-  thumbprint_list = [data.tls_certificate.eks.certificates[0].sha1_fingerprint]
-  url             = aws_eks_cluster.devops-project.identity[0].oidc[0].issuer
-}
-
-# Create the Role for the Service Account (IRSA). This role must trust the OIDC provider you just created.
-resource "aws_iam_role" "ebs_csi_role" {
-  name = "ebs-csi-controller-role"
-
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Action = "sts:AssumeRoleWithWebIdentity"
-      Effect = "Allow"
-      Principal = {
-        Federated = aws_iam_openid_connect_provider.main.arn
-      }
-      Condition = {
-        StringEquals = {
-          "${replace(aws_iam_openid_connect_provider.main.url, "https://", "")}:sub" = "system:serviceaccount:kube-system:ebs-csi-controller-sa"
-        }
-      }
-    }]
-  })
-}
-
-# Update your Addon Resource: Now, tell the EKS Add-on to use this specific role.
-resource "aws_eks_addon" "ebs_csi_driver" {
-  cluster_name = aws_eks_cluster.devops-project.name
-  addon_name   = "aws-ebs-csi-driver"
-
-  resolve_conflicts_on_create = "OVERWRITE"
-  resolve_conflicts_on_update = "OVERWRITE"
-
-  # Attach the IAM Role to the Addon
-  service_account_role_arn = aws_iam_role.ebs_csi_role.arn
-
-  timeouts {
-    create = "5m"
-    update = "5m"
-    delete = "5m"
-  }
-}
-
-# Attach the IAM Policy (The permissions)
-# Note: If you already have an attachment for this role, Terraform will just update it.
-resource "aws_iam_role_policy_attachment" "ebs_csi_attach" {
-  role       = aws_iam_role.ebs_csi_role.name
-  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy"
 }
 
 resource "aws_iam_role_policy_attachment" "devops-project_node_group_role_policy" {
